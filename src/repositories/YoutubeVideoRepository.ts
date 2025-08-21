@@ -30,4 +30,21 @@ export default class YoutubeVideoRepository extends VideoRepository {
         return new Video(firstItemId, firstItem.snippet?.title ?? 'Sem título');
     }
 
+    public async getFromURL(url: string): Promise<Video | null> {
+        const videoIdMatch = url.match(/(?:https?:\/\/)?(?:www\.)?youtu(?:\.be\/|be\.com\/(?:watch\?v=|embed\/|v\/|shorts\/))([a-zA-Z0-9_-]{11})/);
+        if (!videoIdMatch || videoIdMatch.length < 2) return null;
+        const videoId = videoIdMatch[1];
+
+        const res = await this.youtubeService.videos.list({
+            part: ['id', 'snippet'],
+            id: [videoId],
+            maxResults: 1
+        });
+
+        const items = res.data.items ?? [];
+        if (items.length === 0) return null;
+
+        const firstItem = items[0];
+        return new Video(firstItem.id ?? videoId, firstItem.snippet?.title ?? 'Sem título');
+    }
 }

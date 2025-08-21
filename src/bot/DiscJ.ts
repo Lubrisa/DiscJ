@@ -83,6 +83,28 @@ const commandToDescription = new Map<DiscJCommand, string>()
         'Exemplo: !dj help play',
     ].join('\n'));
 
+const isYoutubeVideoUrl = (url: string): boolean => {
+    try {
+        const parsed = new URL(url);
+        if (
+            (parsed.hostname === 'www.youtube.com' || parsed.hostname === 'youtube.com') &&
+            parsed.pathname === '/watch' &&
+            parsed.searchParams.has('v')
+        ) {
+            return true;
+        }
+        if (
+            (parsed.hostname === 'youtu.be') &&
+            parsed.pathname.length > 1
+        ) {
+            return true;
+        }
+        return false;
+    } catch {
+        return false;
+    }
+};
+
 export type DiscJAction = (message: Message, args: string[], options: string[]) => Promise<Message>;
 /**
  * DiscJ é um bot de música para Discord que permite tocar vídeos do YouTube em canais de voz.
@@ -175,15 +197,6 @@ export default class DiscJ {
         this.voiceConnection = undefined;
     }
 
-    private async searchFirst(query: string): Promise<Video | null> {
-        try {
-            return this.videoRepository.getFirstMatch(query);
-        } catch (e: any) {
-            console.error('Erro na YouTube Data API:', e);
-            throw new Error('Falha ao buscar no YouTube.');
-        }
-    }
-
     private async playTrack(video: Video): Promise<void> {
         await this.player.play(video.url.toString());
         this.isPlaying = true;
@@ -202,7 +215,12 @@ export default class DiscJ {
         }
 
         try {
-            const video = await this.searchFirst(query);
+            let video: Video | null = null;
+            if (isYoutubeVideoUrl(query)) {
+                video = await this.videoRepository.getFromURL(query);
+            } else {
+                video = await this.videoRepository.getFirstMatch(query);
+            }
 
             if (!video) {
                 return message.reply('Nenhum resultado encontrado no YouTube.');
