@@ -47,4 +47,20 @@ export default class YoutubeVideoRepository extends VideoRepository {
         const firstItem = items[0];
         return new Video(firstItem.id ?? videoId, firstItem.snippet?.title ?? 'Sem título');
     }
+
+    public async getPlaylistVideosFromURL(url: string): Promise<Video[]> {
+        const playlistIdMatch = url.match(/(?:https?:\/\/)?(?:www\.)?youtube\.com\/(?:playlist\?list=|watch\?v=[^&]+&list=)([a-zA-Z0-9_-]+)/);
+        if (!playlistIdMatch || playlistIdMatch.length < 2) return [];
+        const playlistId = playlistIdMatch[1];
+
+        const res = await this.youtubeService.playlistItems.list({
+            part: ['id', 'snippet'],
+            playlistId: playlistId,
+            maxResults: 50
+        });
+
+        return res.data.items?.map(item => {
+            return new Video(item.snippet?.resourceId?.videoId ?? '', item.snippet?.title ?? 'Sem título');
+        }) || [];
+    }
 }

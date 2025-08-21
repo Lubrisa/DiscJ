@@ -111,6 +111,17 @@ const isYoutubeVideoUrl = (url: string): boolean => {
     }
 };
 
+const isPlaylistUrl = (url: string): boolean => {
+    try {
+        const parsed = new URL(url);
+        return (parsed.hostname === 'www.youtube.com' || parsed.hostname === 'youtube.com') &&
+            parsed.pathname === '/playlist' &&
+            parsed.searchParams.has('list');
+    } catch {
+        return false;
+    }
+};
+
 export type DiscJAction = (message: Message, args: string[], options: string[]) => Promise<Message>;
 /**
  * DiscJ é um bot de música para Discord que permite tocar vídeos do YouTube em canais de voz.
@@ -209,6 +220,58 @@ export default class DiscJ {
         this.isPlaying = true;
     }
 
+    private async playVideo(message: Message, channel: VoiceBasedChannel, query: string, force: boolean = false): Promise<Message> {
+        const video = isYoutubeVideoUrl(query)
+            ? await this.videoRepository.getFromURL(query)
+            : await this.videoRepository.getFirstMatch(query);
+
+        if (!video) {
+            return message.reply('Nenhum resultado encontrado no YouTube.');
+        }
+
+        if (this.isPlaying && !force) {
+            this.queue.add(video);
+            return message.reply({
+                content: `Vídeo adicionado à fila: ${video.title}\n${video.url}`,
+                allowedMentions: {repliedUser: false},
+            });
+        } else if (!this.isPlaying) {
+            this.queue.add(video).next();
+        } else {
+            this.queue.addAsCurrent(video);
+        }
+
+        await this.getVoiceConnection(channel);
+        await this.playTrack(video);
+        return message.reply({
+            content: `Tocando: ${video.title}\n${video.url}`,
+            allowedMentions: {repliedUser: false},
+        });
+    }
+
+    private async playPlaylist(message: Message, query: string) {
+        const videos = await this.videoRepository.getPlaylistVideosFromURL(query);
+
+        if (videos.length === 0) {
+            return message.reply('Nenhum resultado encontrado no YouTube.');
+        }
+
+        videos.forEach(this.queue.add.bind(this.queue));
+        if (!this.queue.current) {
+            await this.getVoiceConnection(message.member?.voice.channel!);
+            await this.playTrack(this.queue.next()!);
+            return message.reply({
+                content: `Playlist iniciada: ${videos[0].title}\n${videos[0].url}`,
+                allowedMentions: {repliedUser: false},
+            })
+        }
+
+        return message.reply({
+            content: `Playlist adicionada à fila. Total de vídeos: ${videos.length}`,
+            allowedMentions: {repliedUser: false},
+        });
+    }
+
     private async play(message: Message, args: string[], options: string[]): Promise<Message> {
         const query = args.join(' ');
 
@@ -222,35 +285,13 @@ export default class DiscJ {
         }
 
         try {
-            let video: Video | null = null;
-            if (isYoutubeVideoUrl(query)) {
-                video = await this.videoRepository.getFromURL(query);
+            if (isPlaylistUrl(query)) {
+                console.log('Playlist URL:', query);
+                return await this.playPlaylist(message, query);
             } else {
-                video = await this.videoRepository.getFirstMatch(query);
+                console.log('Video query or URL:', query);
+                return await this.playVideo(message, channel, query, options.includes('--force'));
             }
-
-            if (!video) {
-                return message.reply('Nenhum resultado encontrado no YouTube.');
-            }
-
-            if (this.isPlaying && !options.includes('force')) {
-                this.queue.add(video);
-                return message.reply({
-                    content: `Vídeo adicionado à fila: ${video.title}\n${video.url}`,
-                    allowedMentions: {repliedUser: false},
-                });
-            } else if (!this.isPlaying) {
-                this.queue.add(video).next();
-            } else {
-                this.queue.addAsCurrent(video);
-            }
-
-            await this.getVoiceConnection(channel);
-            await this.playTrack(video);
-            return message.reply({
-                content: `Tocando: ${video.title}\n${video.url}`,
-                allowedMentions: {repliedUser: false},
-            });
         } catch (e: any) {
             console.error('Erro ao buscar no YouTube:', e);
             return message.reply('Erro ao buscar no YouTube.');
