@@ -22,7 +22,7 @@ export type DiscJCommand =
     | 'get-volume'
     | 'dequeue'
     | 'clear-queue'
-    | 'list-queue'
+    | 'show-queue'
     | 'help';
 
 const commandToDescription = new Map<DiscJCommand, string>()
@@ -65,7 +65,7 @@ const commandToDescription = new Map<DiscJCommand, string>()
         'Descrição: Retorna o volume atual do player',
         'Exemplo: !dj get-volume',
     ].join('\n'))
-    .set('list-queue', [
+    .set('show-queue', [
         'Comando: list-queue',
         'Descrição: Lista os vídeos na fila. Se a fila estiver vazia, retorna uma mensagem informando',
         'Exemplo: !dj list-queue',
@@ -126,7 +126,7 @@ export default class DiscJ {
             ['previous', this.previous.bind(this)],
             ['set-volume', this.setVolume.bind(this)],
             ['get-volume', this.getVolume.bind(this)],
-            ['list-queue', this.listQueue.bind(this)],
+            ['show-queue', this.listQueue.bind(this)],
             ['help', this.help.bind(this)],
         ]);
     }
