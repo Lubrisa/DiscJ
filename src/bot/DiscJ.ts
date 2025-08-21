@@ -22,7 +22,66 @@ export type DiscJCommand =
     | 'get-volume'
     | 'dequeue'
     | 'clear-queue'
-    | 'list-queue';
+    | 'list-queue'
+    | 'help';
+
+const commandToDescription = new Map<DiscJCommand, string>()
+    .set('play', [
+        'Comando: play <busca no YouTube> [--force]',
+        'Descrição: Toca um vídeo do YouTube no canal de voz. Se algum vídeo já estiver tocando, adiciona o vídeo na fila',
+        'Parâmetros:',
+        '- `<busca no YouTube>`: Uma sequência de palavras para buscar no YouTube',
+        'Opções:',
+        '- force: Se a fila estiver vazia, não faz nada. Caso contrário, força o vídeo a tocar imediatamente, movendo todos os outros vídeos para a frente (o vídeo tocando atualmente será tocado depois)',
+        'Exemplo: !dj play Toxicity System of a Down',
+    ].join('\n'))
+    .set('pause', [
+        'Comando: pause',
+        'Descrição: Se algum vídeo estiver tocando, pausa a reprodução. Caso contrário, não faz nada',
+        'Exemplo: !dj pause',
+    ].join('\n'))
+    .set('stop', [
+        'Comando: stop',
+        'Descrição: Para a reprodução de vídeos, limpa a fila e sai do canal de voz',
+        'Exemplo: !dj stop',
+    ].join('\n'))
+    .set('next', [
+        'Comando: next',
+        'Descrição: Toca o próximo vídeo na fila. Se não houver próximo vídeo, não faz nada',
+        'Exemplo: !dj next',
+    ].join('\n'))
+    .set('previous', [
+        'Comando: previous',
+        'Descrição: Toca o vídeo anterior na fila. Se não houver vídeo anterior, não faz nada',
+        'Exemplo: !dj previous',
+    ].join('\n'))
+    .set('set-volume', [
+        'Comando: set-volume <0..100>',
+        'Descrição: Ajusta o volume do player. O volume deve ser um número entre 0 e 100',
+        'Exemplo: !dj set-volume 50',
+    ].join('\n'))
+    .set('get-volume', [
+        'Comando: get-volume',
+        'Descrição: Retorna o volume atual do player',
+        'Exemplo: !dj get-volume',
+    ].join('\n'))
+    .set('list-queue', [
+        'Comando: list-queue',
+        'Descrição: Lista os vídeos na fila. Se a fila estiver vazia, retorna uma mensagem informando',
+        'Exemplo: !dj list-queue',
+    ].join('\n'))
+    .set('clear-queue', [
+        'Comando: clear-queue',
+        'Descrição: Limpa a fila de vídeos',
+        'Exemplo: !dj clear-queue',
+    ].join('\n'))
+    .set('help', [
+        'Comando: help [comando]',
+        'Descrição: Retorna a descrição do comando especificado. Se nenhum comando for especificado, retorna a lista de todos os comandos disponíveis',
+        'Parâmetros:',
+        ' - comando: O nome do comando para o qual se deseja ver a descrição',
+        'Exemplo: !dj help play',
+    ].join('\n'));
 
 export type DiscJAction = (message: Message, args: string[], options: string[]) => Promise<Message>;
 /**
@@ -68,6 +127,7 @@ export default class DiscJ {
             ['set-volume', this.setVolume.bind(this)],
             ['get-volume', this.getVolume.bind(this)],
             ['list-queue', this.listQueue.bind(this)],
+            ['help', this.help.bind(this)],
         ]);
     }
 
@@ -249,5 +309,21 @@ export default class DiscJ {
         return message.reply({
             embeds: this.queue.historyToEmbeds(),
         });
+    }
+
+    private async help(message: Message, args: string[], options: string[]): Promise<Message> {
+        const [command] = args;
+
+        if (!command) {
+            return message.reply(
+                Array.from(commandToDescription.values())
+                    .join('\n\n'));
+        } else {
+            const description = commandToDescription.get(command as DiscJCommand);
+            if (!description) {
+                return message.reply(`Comando desconhecido: ${command}`);
+            }
+            return message.reply(description);
+        }
     }
 }
