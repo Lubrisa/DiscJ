@@ -235,22 +235,15 @@ export default class DiscJ {
             } else if (!this.isPlaying) {
                 this.queue.add(video).next();
             } else {
-
+                this.queue.addAsCurrent(video);
             }
 
-            if (!this.isPlaying) {
-                this.queue.next();
-                await this.getVoiceConnection(channel);
-                await this.playTrack(video);
-                return message.reply({
-                    content: `Tocando: ${video.title}\n${video.url}`,
-                    allowedMentions: {repliedUser: false},
-                });
-            } else {
-                return message.reply({
-                    content: `Vídeo adicionado a fila: ${video.title}\n${video.url}`,
-                });
-            }
+            await this.getVoiceConnection(channel);
+            await this.playTrack(video);
+            return message.reply({
+                content: `Tocando: ${video.title}\n${video.url}`,
+                allowedMentions: {repliedUser: false},
+            });
         } catch (e: any) {
             console.error('Erro ao buscar no YouTube:', e);
             return message.reply('Erro ao buscar no YouTube.');
