@@ -22,6 +22,10 @@ export default class Player {
         this.setVolume(volume);
     }
 
+    public get isPlaying() {
+        return this.audioPlayer.state.status === AudioPlayerStatus.Playing;
+    }
+
     public addErrorHandler(handler: (error: any) => void): Player {
         this.audioPlayer.on('error', handler);
 
@@ -72,6 +76,10 @@ export default class Player {
 
     public pause() {
         return this.audioPlayer.pause();
+    }
+
+    public resume() {
+        return this.audioPlayer.unpause();
     }
 
     public stop() {

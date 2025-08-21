@@ -23,7 +23,8 @@ export type DiscJCommand =
     | 'dequeue'
     | 'clear-queue'
     | 'show-queue'
-    | 'help';
+    | 'help'
+    | 'resume';
 
 const commandToDescription = new Map<DiscJCommand, string>()
     .set('play', [
@@ -81,6 +82,11 @@ const commandToDescription = new Map<DiscJCommand, string>()
         'Parâmetros:',
         ' - comando: O nome do comando para o qual se deseja ver a descrição',
         'Exemplo: !dj help play',
+    ].join('\n'))
+    .set('resume', [
+        'Comando: resume',
+        'Descrição: Retorna o player ao estado de reprodução. Se o player já estiver tocando, não faz nada',
+        'Exemplo: !dj resume',
     ].join('\n'));
 
 const isYoutubeVideoUrl = (url: string): boolean => {
@@ -150,6 +156,7 @@ export default class DiscJ {
             ['get-volume', this.getVolume.bind(this)],
             ['show-queue', this.listQueue.bind(this)],
             ['help', this.help.bind(this)],
+            ['resume', this.resume.bind(this)],
         ]);
     }
 
@@ -256,6 +263,18 @@ export default class DiscJ {
             return message.reply('Pausado.');
         }
         return message.reply('Nada está tocando.');
+    }
+
+    private async resume(message: Message, args: string[], options: string[]): Promise<Message> {
+        if (this.player.isPlaying) {
+            this.isPlaying = true;
+            return message.reply('Player já está tocando.');
+        } else if (this.player.resume()) {
+            this.isPlaying = true;
+            return message.reply('Continuando a reprodução.');
+        }
+
+        return message.reply('Nada está pausado.');
     }
 
     private async stop(message: Message, args: string[]): Promise<Message> {
