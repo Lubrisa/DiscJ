@@ -6,7 +6,7 @@ import {
     type VoiceConnection,
     VoiceConnectionStatus,
 } from '@discordjs/voice';
-import {Message, type VoiceBasedChannel} from 'discord.js';
+import {Message, type VoiceBasedChannel, TextBasedChannel} from 'discord.js';
 import Video from '../queue/Video';
 import VideoQueue from "../queue/VideoQueue";
 import Player from "./Player";
@@ -122,7 +122,8 @@ const isPlaylistUrl = (url: string): boolean => {
     }
 };
 
-export type DiscJAction = (message: Message, args: string[], options: string[]) => Promise<Message>;
+export type DiscJActionResult = { content?: string; embeds?: any[] };
+export type DiscJAction = (message: Message, args: string[], options: string[]) => Promise<DiscJActionResult>;
 /**
  * DiscJ é um bot de música para Discord que permite tocar vídeos do YouTube em canais de voz.
  */
@@ -168,21 +169,30 @@ export default class DiscJ {
             ['show-queue', this.listQueue.bind(this)],
             ['help', this.help.bind(this)],
             ['resume', this.resume.bind(this)],
+            ['clear-queue', this.clearQueue.bind(this)],
         ]);
     }
 
+    // Helper para garantir que o canal suporta .send()
+    private getTextChannel(channel: any): TextBasedChannel | null {
+        if (channel && typeof channel.send === 'function') {
+            return channel as TextBasedChannel;
+        }
+        return null;
+    }
+
     // ---------- Dispatcher ----------
-    public async do(message: Message, command: DiscJCommand, args: string[], options: string[]): Promise<Message> {
+    public async do(message: Message, command: DiscJCommand, args: string[], options: string[]): Promise<DiscJActionResult> {
         const action = this.commandToAction.get(command);
         if (!action) {
-            return message.reply(`Comando desconhecido: ${command}`);
+            return { content: `Comando desconhecido: ${command}` };
         }
 
         try {
             return await action(message, args, options);
         } catch (e) {
             console.error(e);
-            return message.reply('Ocorreu um erro ao executar o comando.');
+            return { content: 'Ocorreu um erro ao executar o comando.' };
         }
     }
 
@@ -220,21 +230,20 @@ export default class DiscJ {
         this.isPlaying = true;
     }
 
-    private async playVideo(message: Message, channel: VoiceBasedChannel, query: string, force: boolean = false): Promise<Message> {
+    private async playVideo(message: Message, channel: VoiceBasedChannel, query: string, force: boolean = false): Promise<DiscJActionResult> {
         const video = isYoutubeVideoUrl(query)
             ? await this.videoRepository.getFromURL(query)
             : await this.videoRepository.getFirstMatch(query);
 
         if (!video) {
-            return message.reply('Nenhum resultado encontrado no YouTube.');
+            return { content: 'Nenhum resultado encontrado no YouTube.' };
         }
 
         if (this.isPlaying && !force) {
             this.queue.add(video);
-            return message.reply({
+            return {
                 content: `Vídeo adicionado à fila: ${video.title}\n${video.url}`,
-                allowedMentions: {repliedUser: false},
-            });
+            };
         } else if (!this.isPlaying) {
             this.queue.add(video).next();
         } else {
@@ -243,82 +252,76 @@ export default class DiscJ {
 
         await this.getVoiceConnection(channel);
         await this.playTrack(video);
-        return message.reply({
+        return {
             content: `Tocando: ${video.title}\n${video.url}`,
-            allowedMentions: {repliedUser: false},
-        });
+        };
     }
 
-    private async playPlaylist(message: Message, query: string) {
+    private async playPlaylist(message: Message, query: string): Promise<DiscJActionResult> {
         const videos = await this.videoRepository.getPlaylistVideosFromURL(query);
 
         if (videos.length === 0) {
-            return message.reply('Nenhum resultado encontrado no YouTube.');
+            return { content: 'Nenhum resultado encontrado no YouTube.' };
         }
 
         videos.forEach(this.queue.add.bind(this.queue));
         if (!this.queue.current) {
             await this.getVoiceConnection(message.member?.voice.channel!);
             await this.playTrack(this.queue.next()!);
-            return message.reply({
+            return {
                 content: `Playlist iniciada: ${videos[0].title}\n${videos[0].url}`,
-                allowedMentions: {repliedUser: false},
-            })
+            };
         }
 
-        return message.reply({
+        return {
             content: `Playlist adicionada à fila. Total de vídeos: ${videos.length}`,
-            allowedMentions: {repliedUser: false},
-        });
+        };
     }
 
-    private async play(message: Message, args: string[], options: string[]): Promise<Message> {
+    private async play(message: Message, args: string[], options: string[]): Promise<DiscJActionResult> {
         const query = args.join(' ');
 
         if (query.trim() === '') {
-            return message.reply('Para usar este comando, digite: !play <busca no YouTube>');
+            return { content: 'Para usar este comando, digite: /play <busca no YouTube>' };
         }
 
         const channel = message.member?.voice.channel;
         if (!channel) {
-            return message.reply('Você precisa estar em um canal de voz para usar este comando.');
+            return { content: 'Você precisa estar em um canal de voz para usar este comando.' };
         }
 
         try {
             if (isPlaylistUrl(query)) {
-                console.log('Playlist URL:', query);
                 return await this.playPlaylist(message, query);
             } else {
-                console.log('Video query or URL:', query);
                 return await this.playVideo(message, channel, query, options.includes('--force'));
             }
         } catch (e: any) {
             console.error('Erro ao buscar no YouTube:', e);
-            return message.reply('Erro ao buscar no YouTube.');
+            return { content: 'Erro ao buscar no YouTube.' };
         }
     }
 
-    private async pause(message: Message, args: string[], options: string[]): Promise<Message> {
+    private async pause(message: Message, args: string[], options: string[]): Promise<DiscJActionResult> {
         if (this.player.pause()) {
             this.isPlaying = false;
-            return message.reply('Pausado.');
+            return { content: 'Pausado.' };
         }
-        return message.reply('Nada está tocando.');
+        return { content: 'Nada está tocando.' };
     }
 
-    private async resume(message: Message, args: string[], options: string[]): Promise<Message> {
+    private async resume(message: Message, args: string[], options: string[]): Promise<DiscJActionResult> {
         if (this.player.isPlaying) {
             this.isPlaying = true;
-            return message.reply('Player já está tocando.');
+            return { content: 'Player já está tocando.' };
         } else if (this.player.resume()) {
             this.isPlaying = true;
-            return message.reply('Continuando a reprodução.');
+            return { content: 'Continuando a reprodução.' };
         }
-
-        return message.reply('Nada está pausado.');
+        return { content: 'Nada está pausado.' };
     }
 
-    private async stop(message: Message, args: string[]): Promise<Message> {
+    private async stop(message: Message, args: string[]): Promise<DiscJActionResult> {
         this.queue.clear();
         this.isPlaying = false;
         try {
@@ -328,73 +331,92 @@ export default class DiscJ {
         }
 
         this.disposeVoiceConnection();
-        return message.reply('Parado e saí do canal de voz.');
+        return { content: 'Parado e saí do canal de voz.' };
     }
 
-    private async next(message: Message, args: string[], options: string[]): Promise<Message> {
+    private async next(message: Message, args: string[], options: string[]): Promise<DiscJActionResult> {
         if (!this.queue.hasNext) {
-            return message.reply('Não há próxima música na fila.');
+            return { content: 'Não há próxima música na fila.' };
         }
 
         await this.playTrack(this.queue.next()!);
-        return message;
+        return { content: 'Tocando próxima música.' };
     }
 
-    private async previous(message: Message, args: string[], options: string[]): Promise<Message> {
+    private async previous(message: Message, args: string[], options: string[]): Promise<DiscJActionResult> {
         if (!this.queue.hasPrevious) {
-            return message.reply('Não há música anterior.');
+            return { content: 'Não há música anterior.' };
         }
 
         await this.playTrack(this.queue.previous()!);
-        return message;
+        return { content: 'Tocando música anterior.' };
     }
 
-    private async setVolume(message: Message, args: string[], options: string[]): Promise<Message> {
+    private async setVolume(message: Message, args: string[], options: string[]): Promise<DiscJActionResult> {
         const [volume] = args;
 
         if (!volume) {
-            return message.reply('Para usar este comando, digite: !set-volume <0..100>');
+            return { content: 'Para usar este comando, digite: /set-volume <0..100>' };
         }
 
         const volumeNum = Number(volume);
 
         if (Number.isNaN(volumeNum)) {
-            return message.reply('Volume inválido. Use um número entre 0 e 100.');
+            return { content: 'Volume inválido. Use um número entre 0 e 100.' };
         }
 
         try {
             this.player.setVolume(volumeNum);
         } catch (e: any) {
-            return message.reply(e.message);
+            return { content: e.message };
         }
 
-        return message.reply(`Volume ajustado para ${volumeNum}%.`);
+        return { content: `Volume ajustado para ${volumeNum}%.` };
     }
 
-    private async getVolume(message: Message, args: string[], options: string[]): Promise<Message> {
-        return message.reply(`Volume atual: ${this.player.getVolume()}%.`);
+    private async getVolume(message: Message, args: string[], options: string[]): Promise<DiscJActionResult> {
+        return { content: `Volume atual: ${this.player.getVolume()}%.` };
     }
 
-    private async listQueue(message: Message, args: string[], options: string[]): Promise<Message> {
-        if (this.queue.isEmpty) return message.reply('Fila vazia.');
-        return message.reply({
-            embeds: this.queue.historyToEmbeds(),
+    private async listQueue(message: Message, args: string[], options: string[]): Promise<DiscJActionResult> {
+        if (this.queue.isEmpty) return { content: 'Fila vazia.' };
+
+        const videos = this.queue['history'];
+        const pointer = this.queue['pointer'];
+        const lines = videos.map((v, idx) => {
+            const prefix = idx === pointer ? '▶️ ' : `${idx + 1}. `;
+            return `${prefix}[${v.title}](${v.url})`;
         });
+
+        return {
+            embeds: [
+                {
+                    title: 'Fila de Reprodução',
+                    description: lines.join('\n'),
+                    color: 0xff0000,
+                }
+            ]
+        };
     }
 
-    private async help(message: Message, args: string[], options: string[]): Promise<Message> {
+    private async help(message: Message, args: string[], options: string[]): Promise<DiscJActionResult> {
         const [command] = args;
 
         if (!command) {
-            return message.reply(
-                Array.from(commandToDescription.values())
-                    .join('\n\n'));
+            return {
+                content: Array.from(commandToDescription.values()).join('\n\n'),
+            };
         } else {
             const description = commandToDescription.get(command as DiscJCommand);
             if (!description) {
-                return message.reply(`Comando desconhecido: ${command}`);
+                return { content: `Comando desconhecido: ${command}` };
             }
-            return message.reply(description);
+            return { content: description };
         }
+    }
+
+    private async clearQueue(message: Message, args: string[], options: string[]): Promise<DiscJActionResult> {
+        this.queue.clear();
+        return { content: 'Fila limpa.' };
     }
 }
